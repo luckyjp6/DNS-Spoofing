@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+import os
+from scapy.all import *
+
+IP_MAC = []
+my_MAC = ""
+
+def get_my_MAC():
+    global my_MAC
+    interface_name = "ens33"
+    f = open('/sys/class/net/' + interface_name + '/address')
+    my_MAC = f.read().strip()
+    print("my MAC: " + my_MAC)
+
+def sort_IP_MAC(entry):
+    return entry[0]
+
+def collect_IP_MAC_info():
+    global IP_MAC
+    # os.system("nmap -sp 172.20.74.1-254")
+    from_child = os.popen("arp -a").read()
+    records = from_child.split()
+    print("Available devices")
+    print('-'*40)
+    print("IP\t\t\tMAC")
+    print('-'*40)
+
+    tmp = ""
+    for record in records:
+        # IP addr
+        if len(record.split('.')) == 4:
+            tmp = record[1:-1]
+        # MAC addr
+        if len(record.split(':')) == 6:
+            IP_MAC.append([tmp,record])
+            tmp = ""
+    IP_MAC.sort(key=sort_IP_MAC)
+    for entry in IP_MAC:
+        print(entry[0], end="\t\t")
+        print(entry[1], end='\n')
+
+def ARP_spoofing(packet):
+    # get ARP request
+    if ARP in packet and packet[ARP].op == ARP.who_has:
+        print(f"Received ARP request from {packet[ARP].psrc}")
+        arp = ARP(op=ARP.is_at, pdst=packet[ARP].psrc, hwdst=packet[ARP].hwsrc \
+                psrc=, hwsrc=)
+    return
+
+get_my_MAC()
+collect_IP_MAC_info()
+
+sniff(filter="arp", prn=ARP_spoofing, store=0)
