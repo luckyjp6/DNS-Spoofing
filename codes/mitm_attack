@@ -9,7 +9,7 @@ import scapy.all as scapy
 from subprocess import Popen, DEVNULL
 
 IP_MAC = []
-interface_name = "enp0s6"
+interface_name = "ens33"
 my_MAC = ""
 my_IP = ""
 log_dir = "./sslsplit_log"
@@ -108,6 +108,7 @@ while True:
     
     ARP_spoofing()
     process_packets()
+
     for round in range(10):
         print(f"#### {round+1} ####")
         time.sleep(3)
